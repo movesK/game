@@ -2,59 +2,59 @@
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-<title>Super Mario - HTML Edition</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Super Mario - Web Edition</title>
 <style>
-  * { margin: 0; padding: 0; box-sizing: border-box; }
+  * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
   html, body {
-    width: 100%; height: 100%;
-    background: #000;
-    overflow: hidden;
-    display: flex; justify-content: center; align-items: center;
-    font-family: Consolas, monospace;
-    touch-action: none;
+    width:100%; height:100%; background:#000; overflow:hidden;
+    font-family: Consolas, monospace; touch-action:none;
+    display:flex; justify-content:center; align-items:center;
   }
-  #game-wrap {
-    position: relative;
-    background: #5c94fc;
+  #wrap { position:relative; }
+  canvas {
+    display:block;
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
   }
-  canvas { display: block; image-rendering: pixelated; }
-  #mobile-controls {
-    position: fixed; bottom: 20px; left: 0; right: 0;
-    display: none; justify-content: space-between;
-    padding: 0 20px; pointer-events: none;
+  .ctrl {
+    position:fixed; bottom:16px; z-index:10;
+    display:flex; gap:14px; user-select:none;
   }
-  #mobile-controls .btn {
-    width: 70px; height: 70px; border-radius: 50%;
-    background: rgba(255,255,255,0.3);
-    border: 3px solid rgba(255,255,255,0.6);
-    color: white; font-size: 28px; font-weight: bold;
-    display: flex; justify-content: center; align-items: center;
-    pointer-events: auto; user-select: none;
+  #left-group { left:16px; }
+  #right-group { right:16px; }
+  .btn {
+    width:60px; height:60px; border-radius:50%;
+    background:rgba(255,255,255,0.18);
+    border:2px solid rgba(255,255,255,0.5);
+    color:#fff; font-size:24px; font-weight:bold;
+    display:flex; justify-content:center; align-items:center;
+    backdrop-filter: blur(2px);
   }
-  #mobile-controls .left-group { display: flex; gap: 15px; }
-  #mobile-controls .right-group { display: flex; gap: 15px; }
-  @media (max-width: 768px) {
-    #mobile-controls { display: flex; }
+  .btn:active { background:rgba(255,255,255,0.4); }
+  #hint {
+    position:fixed; top:8px; left:50%; transform:translateX(-50%);
+    color:rgba(255,255,255,0.7); font-size:12px; z-index:10;
+    pointer-events:none; white-space:nowrap;
+  }
+  @media (min-width: 900px) {
+    .ctrl { display:none; }
   }
 </style>
 </head>
 <body>
-<div id="game-wrap">
-  <canvas id="game"></canvas>
+<div id="wrap"><canvas id="game"></canvas></div>
+<div id="hint">← → 移动　↑/空格 跳　R 重开</div>
+<div class="ctrl" id="left-group">
+  <div class="btn" id="btn-left">◀</div>
+  <div class="btn" id="btn-right">▶</div>
 </div>
-<div id="mobile-controls">
-  <div class="left-group">
-    <div class="btn" id="btn-left">◀</div>
-    <div class="btn" id="btn-right">▶</div>
-  </div>
-  <div class="right-group">
-    <div class="btn" id="btn-jump">A</div>
-  </div>
+<div class="ctrl" id="right-group">
+  <div class="btn" id="btn-jump">A</div>
 </div>
 
 <script>
-
+ 
 const PIXEL = 4;
 const FPS = 60;
 const VIEW_W = 200;
@@ -65,17 +65,22 @@ const GRAVITY = 0.45;
 const MAX_FALL = 8;
 const RUN_ACCEL = 0.25;
 const RUN_MAX = 1.8;
+const RUN_MAX_FAST = 2.8;
 const FRICTION = 0.85;
 const JUMP_POWER = -7.8;
 const JUMP_HOLD_BOOST = 0.22;
 const JUMP_HOLD_FRAMES = 18;
 
-const COLORS = {
-  '.': null,
-  'R': '#e52521', 'S': '#fbb78b', 'B': '#5c3317',
-  'Y': '#ffd700', 'W': '#ffffff', 'K': '#000000',
-  'G': '#00a800', 'g': '#007800', 'O': '#e39d25',
-  'o': '#a86b1a', 'T': '#ffffff', 't': '#c0c0c0',
+const CANVAS_W = VIEW_W * PIXEL;
+const CANVAS_H = VIEW_H * PIXEL;
+
+const COLOR = {
+  ".": null,
+  "R": "#e52521", "S": "#fbb78b", "B": "#5c3317",
+  "Y": "#ffd700", "W": "#ffffff", "K": "#000000",
+  "G": "#00a800", "g": "#007800", "O": "#e39d25",
+  "o": "#a86b1a", "C": "#5c94fc", "T": "#ffffff",
+  "t": "#c0c0c0",
 };
 
 const MS_IDLE = [
@@ -237,33 +242,39 @@ const LEVEL = [
   ["castle", 680, GROUND_Y - 48],
 ];
 
-const canvas = document.getElementById('game');
-const ctx = canvas.getContext('2d');
+const canvas = document.getElementById("game");
+const ctx = canvas.getContext("2d");
+canvas.width = CANVAS_W;
+canvas.height = CANVAS_H;
 
-function resize() {
-  const scale = Math.max(1, Math.min(
-    Math.floor(window.innerWidth / VIEW_W),
-    Math.floor(window.innerHeight / VIEW_H)
-  ));
-  canvas.width = VIEW_W * scale;
-  canvas.height = VIEW_H * scale;
-  ctx.imageSmoothingEnabled = false;
-  ctx.scale(scale, scale);
+function fitCanvas() {
+  const winW = window.innerWidth;
+  const winH = window.innerHeight;
+
+  const maxW = winW - 20;
+  const maxH = winH - (winW < 900 ? 120 : 20);
+  const scale = Math.min(maxW / CANVAS_W, maxH / CANVAS_H);
+  const dispW = Math.floor(CANVAS_W * scale);
+  const dispH = Math.floor(CANVAS_H * scale);
+  canvas.style.width = dispW + "px";
+  canvas.style.height = dispH + "px";
 }
-window.addEventListener('resize', resize);
+window.addEventListener("resize", fitCanvas);
+window.addEventListener("orientationchange", () => setTimeout(fitCanvas, 200));
+fitCanvas();
 
 let keys = {};
+let touchLeft = false, touchRight = false, touchJump = false;
 let mario, camera_x, game_state, score, coins, lives, time_left, jump_timer;
 let goomba_state, coin_state, block_state, mushroom_state;
-let frame = 0;
 
 function reset() {
   mario = {
     x: 20, y: GROUND_Y - 16, vx: 0, vy: 0,
-    on_ground: true, big: false, facing: 1, invincible: 0,
+    on_ground: true, big: false, facing: 1, invincible: 0, frame: 0,
   };
   camera_x = 0;
-  game_state = 'playing';
+  game_state = "playing";
   score = 0;
   coins = 0;
   lives = 3;
@@ -273,40 +284,40 @@ function reset() {
   coin_state = {};
   block_state = {};
   mushroom_state = {};
-  for (const item of LEVEL) {
-    const [kind, ix, iy] = item;
-    if (kind === 'goomba') goomba_state[ix + ',' + iy] = { alive: true, vx: -0.4, flat: 0 };
-    if (kind === 'coin') coin_state[ix + ',' + iy] = true;
-    if (kind === 'brick' || kind === 'qblock') block_state[ix + ',' + iy] = { used: false, bump: 0 };
-    if (kind === 'mushroom') mushroom_state[ix + ',' + iy] = { active: false, vx: 0.8, vy: 0, y: iy };
+  for (const [kind, ix, iy] of LEVEL) {
+    if (kind === "goomba") goomba_state[ix + "," + iy] = { alive: true, vx: -0.4, flat: 0 };
+    if (kind === "coin") coin_state[ix + "," + iy] = true;
+    if (kind === "brick" || kind === "qblock") block_state[ix + "," + iy] = { used: false, bump: 0 };
+    if (kind === "mushroom") mushroom_state[ix + "," + iy] = { active: false, vx: 0.8, vy: 0, y: iy };
   }
 }
 
-window.addEventListener('keydown', e => {
+window.addEventListener("keydown", e => {
   keys[e.code] = true;
-  if (['ArrowUp', 'Space', 'KeyW'].includes(e.code) && mario.on_ground) {
+  if (["ArrowUp", "Space", "KeyW"].includes(e.code) && mario.on_ground) {
     mario.vy = JUMP_POWER;
     mario.on_ground = false;
     jump_timer = 0;
   }
-  if (e.code === 'KeyR') reset();
-  if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'Space'].includes(e.code)) e.preventDefault();
+  if (e.code === "KeyR") reset();
+  if (["ArrowLeft", "ArrowRight", "ArrowUp", "Space", "KeyW", "KeyA", "KeyD"].includes(e.code)) e.preventDefault();
 });
-window.addEventListener('keyup', e => { keys[e.code] = false; });
+window.addEventListener("keyup", e => { keys[e.code] = false; });
 
-const btnLeft = document.getElementById('btn-left');
-const btnRight = document.getElementById('btn-right');
-const btnJump = document.getElementById('btn-jump');
-let touchLeft = false, touchRight = false, touchJump = false;
-function bindTouch(el, on, off) {
-  el.addEventListener('touchstart', e => { e.preventDefault(); on(); });
-  el.addEventListener('touchend', e => { e.preventDefault(); off(); });
-  el.addEventListener('mousedown', e => { e.preventDefault(); on(); });
-  el.addEventListener('mouseup', e => { e.preventDefault(); off(); });
+function bindBtn(id, onDown, onUp) {
+  const el = document.getElementById(id);
+  const down = e => { e.preventDefault(); onDown(); };
+  const up = e => { e.preventDefault(); onUp(); };
+  el.addEventListener("touchstart", down, { passive: false });
+  el.addEventListener("touchend", up, { passive: false });
+  el.addEventListener("touchcancel", up, { passive: false });
+  el.addEventListener("mousedown", down);
+  el.addEventListener("mouseup", up);
+  el.addEventListener("mouseleave", up);
 }
-bindTouch(btnLeft, () => touchLeft = true, () => touchLeft = false);
-bindTouch(btnRight, () => touchRight = true, () => touchRight = false);
-bindTouch(btnJump, () => {
+bindBtn("btn-left", () => touchLeft = true, () => touchLeft = false);
+bindBtn("btn-right", () => touchRight = true, () => touchRight = false);
+bindBtn("btn-jump", () => {
   touchJump = true;
   if (mario.on_ground) {
     mario.vy = JUMP_POWER;
@@ -315,15 +326,16 @@ bindTouch(btnJump, () => {
   }
 }, () => touchJump = false);
 
-function drawSprite(sprite, x, y) {
+function drawSprite(sprite, x, y, flip) {
   for (let r = 0; r < sprite.length; r++) {
-    for (let c = 0; c < sprite[r].length; c++) {
-      const ch = sprite[r][c];
-      const col = COLORS[ch];
+    const row = sprite[r];
+    for (let c = 0; c < row.length; c++) {
+      const col = COLOR[row[c]];
       if (col) {
-        const sx = (x + c - camera_x) * PIXEL;
-        const sy = (y + r) * PIXEL;
-        if (sx > -PIXEL && sx < canvas.width && sy > -PIXEL && sy < canvas.height) {
+        const dc = flip ? (row.length - 1 - c) : c;
+        const sx = Math.floor((x + dc - camera_x) * PIXEL);
+        const sy = Math.floor((y + r) * PIXEL);
+        if (sx > -PIXEL && sx < CANVAS_W && sy > -PIXEL && sy < CANVAS_H) {
           ctx.fillStyle = col;
           ctx.fillRect(sx, sy, PIXEL, PIXEL);
         }
@@ -334,22 +346,25 @@ function drawSprite(sprite, x, y) {
 
 function drawRect(x, y, w, h, col) {
   ctx.fillStyle = col;
-  ctx.fillRect((x - camera_x) * PIXEL, y * PIXEL, w * PIXEL, h * PIXEL);
+  ctx.fillRect(Math.floor((x - camera_x) * PIXEL), Math.floor(y * PIXEL),
+               Math.floor(w * PIXEL), Math.floor(h * PIXEL));
 }
 
 function updateMario() {
   const m = mario;
   let ax = 0;
-  if (keys['ArrowLeft'] || keys['KeyA'] || touchLeft) { ax = -RUN_ACCEL; m.facing = -1; }
-  if (keys['ArrowRight'] || keys['KeyD'] || touchRight) { ax = RUN_ACCEL; m.facing = 1; }
+  const fast = keys["ShiftLeft"] || keys["ShiftRight"];
+  const runMax = fast ? RUN_MAX_FAST : RUN_MAX;
+  if (keys["ArrowLeft"] || keys["KeyA"] || touchLeft) { ax = -RUN_ACCEL; m.facing = -1; }
+  if (keys["ArrowRight"] || keys["KeyD"] || touchRight) { ax = RUN_ACCEL; m.facing = 1; }
   m.vx += ax;
   if (ax === 0) {
     m.vx *= FRICTION;
     if (Math.abs(m.vx) < 0.05) m.vx = 0;
   }
-  m.vx = Math.max(-RUN_MAX, Math.min(RUN_MAX, m.vx));
+  m.vx = Math.max(-runMax, Math.min(runMax, m.vx));
 
-  if ((keys['ArrowUp'] || keys['Space'] || keys['KeyW'] || touchJump) && !m.on_ground) {
+  if ((keys["ArrowUp"] || keys["Space"] || keys["KeyW"] || touchJump) && !m.on_ground) {
     if (jump_timer < JUMP_HOLD_FRAMES) {
       m.vy -= JUMP_HOLD_BOOST;
       jump_timer++;
@@ -364,39 +379,35 @@ function updateMario() {
   const mw = 14;
 
   if (m.y >= GROUND_Y - mh) {
-    m.y = GROUND_Y - mh;
-    m.vy = 0;
-    m.on_ground = true;
+    m.y = GROUND_Y - mh; m.vy = 0; m.on_ground = true;
   }
 
-  for (const item of LEVEL) {
-    const [kind, ix, iy] = item;
-    if (kind !== 'brick' && kind !== 'qblock') continue;
+  for (const [kind, ix, iy] of LEVEL) {
+    if (kind !== "brick" && kind !== "qblock") continue;
     if (m.x + mw > ix && m.x < ix + 8) {
       if (m.y + mh > iy && m.y + mh < iy + 14 && m.vy > 0) {
         m.y = iy - mh; m.vy = 0; m.on_ground = true;
       } else if (m.y < iy + 8 && m.y > iy - 4 && m.vy < 0) {
         m.y = iy + 8; m.vy = 0;
-        const b = block_state[ix + ',' + iy];
-        if (kind === 'qblock' && !b.used) {
+        const b = block_state[ix + "," + iy];
+        if (kind === "qblock" && !b.used) {
           b.used = true; b.bump = 8;
           for (const mm of LEVEL) {
-            if (mm[0] === 'mushroom' && mm[1] === ix) {
-              mushroom_state[mm[1] + ',' + mm[2]].active = true;
-              mushroom_state[mm[1] + ',' + mm[2]].vy = -2;
+            if (mm[0] === "mushroom" && mm[1] === ix) {
+              const mu = mushroom_state[mm[1] + "," + mm[2]];
+              mu.active = true; mu.vy = -2;
             }
           }
           score += 200;
-        } else if (kind === 'brick') {
+        } else if (kind === "brick") {
           b.bump = 8; score += 50;
         }
       }
     }
   }
 
-  for (const item of LEVEL) {
-    const [kind, ix, iy] = item;
-    if (kind !== 'pipe') continue;
+  for (const [kind, ix, iy] of LEVEL) {
+    if (kind !== "pipe") continue;
     if (m.x + mw > ix + 1 && m.x < ix + 13) {
       if (m.y + mh > iy && m.y + mh < iy + 8 && m.vy > 0) {
         m.y = iy - mh; m.vy = 0; m.on_ground = true;
@@ -413,10 +424,9 @@ function updateGoombas() {
   const m = mario;
   const mh = m.big ? 24 : 16;
   const mw = 14;
-  for (const item of LEVEL) {
-    const [kind, ix, iy] = item;
-    if (kind !== 'goomba') continue;
-    const g = goomba_state[ix + ',' + iy];
+  for (const [kind, ix, iy] of LEVEL) {
+    if (kind !== "goomba") continue;
+    const g = goomba_state[ix + "," + iy];
     if (!g.alive) { if (g.flat > 0) g.flat--; continue; }
     const gx = ix + g.vx;
     if (m.x + mw > gx && m.x < gx + 14 && m.y + mh > iy && m.y < iy + 14) {
@@ -426,7 +436,7 @@ function updateGoombas() {
       } else {
         if (m.invincible <= 0) {
           if (m.big) { m.big = false; m.y += 8; m.invincible = 90; }
-          else game_state = 'dead';
+          else game_state = "dead";
         }
       }
     }
@@ -437,12 +447,11 @@ function updateCoins() {
   const m = mario;
   const mh = m.big ? 24 : 16;
   const mw = 14;
-  for (const item of LEVEL) {
-    const [kind, ix, iy] = item;
-    if (kind !== 'coin') continue;
-    if (!coin_state[ix + ',' + iy]) continue;
+  for (const [kind, ix, iy] of LEVEL) {
+    if (kind !== "coin") continue;
+    if (!coin_state[ix + "," + iy]) continue;
     if (m.x + mw > ix && m.x < ix + 8 && m.y + mh > iy && m.y < iy + 8) {
-      coin_state[ix + ',' + iy] = false;
+      coin_state[ix + "," + iy] = false;
       coins++; score += 200;
     }
   }
@@ -452,10 +461,9 @@ function updateMushroom() {
   const m = mario;
   const mh = m.big ? 24 : 16;
   const mw = 14;
-  for (const item of LEVEL) {
-    const [kind, ix, iy] = item;
-    if (kind !== 'mushroom') continue;
-    const mu = mushroom_state[ix + ',' + iy];
+  for (const [kind, ix, iy] of LEVEL) {
+    if (kind !== "mushroom") continue;
+    const mu = mushroom_state[ix + "," + iy];
     if (!mu.active) continue;
     mu.vy = Math.min(mu.vy + GRAVITY, MAX_FALL);
     mu.y += mu.vy;
@@ -471,68 +479,61 @@ function updateMushroom() {
 
 function checkFlag() {
   for (const item of LEVEL) {
-    if (item[0] === 'flag' && mario.x + 14 > item[1] + 2) {
-      game_state = 'win';
-    }
+    if (item[0] === "flag" && mario.x + 14 > item[1] + 2) game_state = "win";
   }
 }
 
 function render() {
-  ctx.fillStyle = '#5c94fc';
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.fillStyle = COLOR["C"];
+  ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
 
-  for (const item of LEVEL) if (item[0] === 'cloud') drawSprite(CLOUD, item[1], item[2]);
-  for (const item of LEVEL) if (item[0] === 'hill') drawSprite(HILL, item[1], item[2]);
-  for (const item of LEVEL) if (item[0] === 'bush') drawSprite(BUSH, item[1], item[2]);
+  for (const item of LEVEL) if (item[0] === "cloud") drawSprite(CLOUD, item[1], item[2]);
+  for (const item of LEVEL) if (item[0] === "hill") drawSprite(HILL, item[1], item[2]);
+  for (const item of LEVEL) if (item[0] === "bush") drawSprite(BUSH, item[1], item[2]);
 
-  drawRect(0, GROUND_Y, VIEW_W + 40, VIEW_H - GROUND_Y, '#e39d25');
-  drawRect(0, GROUND_Y, VIEW_W + 40, 2, '#a86b1a');
+  drawRect(0, GROUND_Y, VIEW_W + 40, VIEW_H - GROUND_Y, "#e39d25");
+  drawRect(0, GROUND_Y, VIEW_W + 40, 2, "#a86b1a");
 
-  for (const item of LEVEL) {
-    const [kind, ix, iy] = item;
-    if (kind === 'brick') {
-      const b = block_state[ix + ',' + iy];
+  for (const [kind, ix, iy] of LEVEL) {
+    if (kind === "brick") {
+      const b = block_state[ix + "," + iy];
       drawSprite(BRICK, ix, iy - b.bump);
       if (b.bump > 0) b.bump--;
-    } else if (kind === 'qblock') {
-      const b = block_state[ix + ',' + iy];
+    } else if (kind === "qblock") {
+      const b = block_state[ix + "," + iy];
       drawSprite(b.used ? QBLOCK_USED : QBLOCK, ix, iy - b.bump);
       if (b.bump > 0) b.bump--;
     }
   }
 
-  for (const item of LEVEL) {
-    if (item[0] === 'pipe') {
-      const ix = item[1], iy = item[2];
+  for (const [kind, ix, iy] of LEVEL) {
+    if (kind === "pipe") {
       drawSprite(PIPE_TOP, ix, iy);
       let by = iy + 16;
       while (by < GROUND_Y) { drawSprite(PIPE_BODY, ix, by); by += 16; }
     }
   }
 
-  const f = frame;
-  for (const item of LEVEL) {
-    const [kind, ix, iy] = item;
-    if (kind === 'coin' && coin_state[ix + ',' + iy]) {
+  const f = mario.frame;
+  for (const [kind, ix, iy] of LEVEL) {
+    if (kind === "coin" && coin_state[ix + "," + iy]) {
       drawSprite((Math.floor(f / 8) % 2 === 0) ? COIN1 : COIN2, ix, iy);
     }
   }
 
-  for (const item of LEVEL) {
-    const [kind, ix, iy] = item;
-    if (kind === 'mushroom') {
-      const mu = mushroom_state[ix + ',' + iy];
+  for (const [kind, ix, iy] of LEVEL) {
+    if (kind === "mushroom") {
+      const mu = mushroom_state[ix + "," + iy];
       if (mu.active) drawSprite(MUSHROOM, ix + mu.vx, mu.y);
     }
   }
 
-  for (const item of LEVEL) if (item[0] === 'flag') drawSprite(FLAG, item[1], item[2]);
-  for (const item of LEVEL) if (item[0] === 'castle') drawSprite(CASTLE, item[1], item[2]);
+  for (const item of LEVEL) if (item[0] === "flag") drawSprite(FLAG, item[1], item[2]);
+  for (const item of LEVEL) if (item[0] === "castle") drawSprite(CASTLE, item[1], item[2]);
 
-  for (const item of LEVEL) {
-    const [kind, ix, iy] = item;
-    if (kind === 'goomba') {
-      const g = goomba_state[ix + ',' + iy];
+  for (const [kind, ix, iy] of LEVEL) {
+    if (kind === "goomba") {
+      const g = goomba_state[ix + "," + iy];
       if (g.alive) {
         drawSprite((Math.floor(f / 8) % 2 === 0) ? GOOMBA1 : GOOMBA2, ix + g.vx, iy);
       } else if (g.flat > 0) {
@@ -543,68 +544,71 @@ function render() {
 
   const m = mario;
   if (!(m.invincible > 0 && Math.floor(f / 4) % 2 === 0)) {
-    let spr;
+    let spr, flip = false;
     if (!m.on_ground) spr = MS_JUMP;
     else if (Math.abs(m.vx) > 0.3) spr = (Math.floor(f / 4) % 2 === 0) ? MS_RUN1 : MS_RUN2;
     else spr = MS_IDLE;
-    drawSprite(spr, m.x, m.y);
+    flip = m.facing < 0;
+    drawSprite(spr, m.x, m.y, flip);
   }
 
-  ctx.fillStyle = 'white';
-  ctx.font = 'bold 10px Consolas';
-  ctx.textAlign = 'left';
-  ctx.fillText(`MARIO ${String(score).padStart(6, '0')}  x${String(coins).padStart(2, '0')}  TIME ${String(time_left).padStart(3, '0')}`, 6, 12);
+  ctx.fillStyle = "white";
+  ctx.font = "bold 10px Consolas";
+  ctx.textAlign = "left";
+  ctx.fillText(`MARIO ${String(score).padStart(6, "0")}  x${String(coins).padStart(2, "0")}  TIME ${String(time_left).padStart(3, "0")}  LIVES ${lives}`, 6, 12);
 
-  if (game_state === 'win') {
-    ctx.textAlign = 'center';
-    ctx.font = 'bold 20px Consolas';
-    ctx.fillText('COURSE CLEAR!', canvas.width / 2, canvas.height / 2 - 20);
-    ctx.font = 'bold 12px Consolas';
-    ctx.fillStyle = '#ffd700';
-    ctx.fillText(`SCORE: ${score}  COINS: ${coins}`, canvas.width / 2, canvas.height / 2 + 10);
-    ctx.fillStyle = 'white';
-    ctx.fillText('Press R to restart', canvas.width / 2, canvas.height / 2 + 35);
-  } else if (game_state === 'dead') {
-    ctx.textAlign = 'center';
-    ctx.font = 'bold 20px Consolas';
-    ctx.fillText('GAME OVER', canvas.width / 2, canvas.height / 2);
-    ctx.font = 'bold 12px Consolas';
-    ctx.fillText('Press R to restart', canvas.width / 2, canvas.height / 2 + 30);
+  if (game_state === "win") {
+    ctx.textAlign = "center";
+    ctx.fillStyle = "white";
+    ctx.font = "bold 18px Consolas";
+    ctx.fillText("COURSE CLEAR!", CANVAS_W / 2, CANVAS_H / 2 - 20);
+    ctx.fillStyle = "#ffd700";
+    ctx.font = "bold 12px Consolas";
+    ctx.fillText(`SCORE: ${score}  COINS: ${coins}`, CANVAS_W / 2, CANVAS_H / 2 + 10);
+    ctx.fillStyle = "white";
+    ctx.fillText("Press R / 刷新重开", CANVAS_W / 2, CANVAS_H / 2 + 35);
+  } else if (game_state === "dead") {
+    ctx.textAlign = "center";
+    ctx.fillStyle = "white";
+    ctx.font = "bold 18px Consolas";
+    ctx.fillText("GAME OVER", CANVAS_W / 2, CANVAS_H / 2);
+    ctx.font = "bold 12px Consolas";
+    ctx.fillText("Press R / 刷新重开", CANVAS_W / 2, CANVAS_H / 2 + 30);
   }
 }
 
-let lastTime = 0;
-let accumulator = 0;
+let lastTime = 0, accumulator = 0;
 const STEP = 1 / FPS;
 
 function loop(t) {
   const dt = (t - lastTime) / 1000;
   lastTime = t;
-  if (dt < 1) {
+  if (dt < 1 && dt > 0) {
     accumulator += dt;
-    while (accumulator >= STEP) {
-      if (game_state === 'playing') {
+    let safety = 0;
+    while (accumulator >= STEP && safety < 5) {
+      if (game_state === "playing") {
         updateMario();
         updateGoombas();
         updateCoins();
         updateMushroom();
         checkFlag();
         if (mario.invincible > 0) mario.invincible--;
-        if (mario.y > VIEW_H + 50) game_state = 'dead';
+        if (mario.y > VIEW_H + 50) game_state = "dead";
         const target = mario.x - VIEW_W * 0.4;
         camera_x += (target - camera_x) * 0.15;
         camera_x = Math.max(0, camera_x);
-        if (frame % 60 === 0 && time_left > 0) time_left--;
-        frame++;
+        if (mario.frame % 60 === 0 && time_left > 0) time_left--;
+        mario.frame++;
       }
       accumulator -= STEP;
+      safety++;
     }
   }
   render();
   requestAnimationFrame(loop);
 }
 
-resize();
 reset();
 requestAnimationFrame(loop);
 </script>
