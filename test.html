@@ -54,7 +54,7 @@
 </div>
 
 <script>
-// ==================== 配置 ====================
+
 const PIXEL = 4;
 const FPS = 60;
 const VIEW_W = 200;
@@ -78,7 +78,6 @@ const COLORS = {
   'o': '#a86b1a', 'T': '#ffffff', 't': '#c0c0c0',
 };
 
-// ==================== 精灵 ====================
 const MS_IDLE = [
   "....RRRRR.......","...RRRRRRRRR....","...BBBSSKS......","..BSBSSSKSSS....",
   "..BSBBSSSKSSS...","..BBSSSSKKKK....","....SSSSSSS.....","...RRBRRRR......",
@@ -180,7 +179,6 @@ const CASTLE = [
   "BBBBBBBBBBBBBBBB","BBBBBBBBBBBBBBBB","BBBBBBBBBBBBBBBB","BBBBBBBBBBBBBBBB",
 ];
 
-// ==================== 关卡 ====================
 const LEVEL = [
   ["ground", 0, 2000],
   ["cloud", 20, 10], ["cloud", 90, 10], ["cloud", 160, 10],
@@ -239,7 +237,6 @@ const LEVEL = [
   ["castle", 680, GROUND_Y - 48],
 ];
 
-// ==================== 画布 ====================
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
 
@@ -255,7 +252,6 @@ function resize() {
 }
 window.addEventListener('resize', resize);
 
-// ==================== 游戏状态 ====================
 let keys = {};
 let mario, camera_x, game_state, score, coins, lives, time_left, jump_timer;
 let goomba_state, coin_state, block_state, mushroom_state;
@@ -286,7 +282,6 @@ function reset() {
   }
 }
 
-// ==================== 输入 ====================
 window.addEventListener('keydown', e => {
   keys[e.code] = true;
   if (['ArrowUp', 'Space', 'KeyW'].includes(e.code) && mario.on_ground) {
@@ -299,7 +294,6 @@ window.addEventListener('keydown', e => {
 });
 window.addEventListener('keyup', e => { keys[e.code] = false; });
 
-// 移动端按钮
 const btnLeft = document.getElementById('btn-left');
 const btnRight = document.getElementById('btn-right');
 const btnJump = document.getElementById('btn-jump');
@@ -321,7 +315,6 @@ bindTouch(btnJump, () => {
   }
 }, () => touchJump = false);
 
-// ==================== 绘制 ====================
 function drawSprite(sprite, x, y) {
   for (let r = 0; r < sprite.length; r++) {
     for (let c = 0; c < sprite[r].length; c++) {
@@ -344,7 +337,6 @@ function drawRect(x, y, w, h, col) {
   ctx.fillRect((x - camera_x) * PIXEL, y * PIXEL, w * PIXEL, h * PIXEL);
 }
 
-// ==================== 更新 ====================
 function updateMario() {
   const m = mario;
   let ax = 0;
@@ -377,7 +369,6 @@ function updateMario() {
     m.on_ground = true;
   }
 
-  // 砖块
   for (const item of LEVEL) {
     const [kind, ix, iy] = item;
     if (kind !== 'brick' && kind !== 'qblock') continue;
@@ -403,7 +394,6 @@ function updateMario() {
     }
   }
 
-  // 水管
   for (const item of LEVEL) {
     const [kind, ix, iy] = item;
     if (kind !== 'pipe') continue;
@@ -487,7 +477,6 @@ function checkFlag() {
   }
 }
 
-// ==================== 渲染 ====================
 function render() {
   ctx.fillStyle = '#5c94fc';
   ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -561,7 +550,6 @@ function render() {
     drawSprite(spr, m.x, m.y);
   }
 
-  // HUD
   ctx.fillStyle = 'white';
   ctx.font = 'bold 10px Consolas';
   ctx.textAlign = 'left';
@@ -585,7 +573,6 @@ function render() {
   }
 }
 
-// ==================== 主循环 ====================
 let lastTime = 0;
 let accumulator = 0;
 const STEP = 1 / FPS;
@@ -617,7 +604,6 @@ function loop(t) {
   requestAnimationFrame(loop);
 }
 
-// ==================== 启动 ====================
 resize();
 reset();
 requestAnimationFrame(loop);
